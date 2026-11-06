@@ -659,8 +659,7 @@ fn notifications(
                 });
         let channel = config
             .notifications
-            .channels
-            .get(channel.as_str())
+            .channel(channel.as_str())
             .filter(|settings| {
                 settings.should_notify(user, None, server, casemapping)
             })

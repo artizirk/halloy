@@ -345,7 +345,7 @@ impl Notifications {
                     ));
 
                     if let Some(channel_notifications_config) =
-                        config.notifications.channels.get(channel.as_str())
+                        config.notifications.channel(channel.as_str())
                         && channel_notifications_config.should_notify(
                             user,
                             None,
