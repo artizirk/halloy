@@ -74,6 +74,21 @@ pub struct Notifications {
 }
 
 impl Notifications {
+    /// Settings for messages in `channel`: an exact `[notifications.channel."<name>"]` entry,
+    /// otherwise the most specific (longest) key with `*` / `?` wildcards that matches it,
+    /// e.g. `"#chat/*"`.
+    pub fn channel(&self, channel: &str) -> Option<&Notification> {
+        self.channels.get(channel).or_else(|| {
+            self.channels
+                .iter()
+                .filter(|(pattern, _)| {
+                    pattern.contains(['*', '?']) && glob_match(pattern, channel)
+                })
+                .max_by_key(|(pattern, _)| pattern.len())
+                .map(|(_, notification)| notification)
+        })
+    }
+
     pub fn load_sounds<'a>(
         &self,
         highlight_matches_sounds: impl Iterator<Item = &'a str>,
@@ -120,5 +135,56 @@ impl Notifications {
         }
 
         sounds
+    }
+}
+
+/// `*` matches any run of characters (including none), `?` exactly one; everything else literally.
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    let (mut p, mut t) = (0, 0);
+    // Position of the last `*` and the text position it was tried at, to backtrack to
+    let mut star: Option<(usize, usize)> = None;
+
+    while t < text.len() {
+        match pattern.get(p) {
+            Some('*') => {
+                star = Some((p, t));
+                p += 1;
+            }
+            Some(&c) if c == '?' || c == text[t] => {
+                p += 1;
+                t += 1;
+            }
+            _ => match star {
+                // Let the last `*` swallow one more character and retry
+                Some((star_p, star_t)) => {
+                    p = star_p + 1;
+                    t = star_t + 1;
+                    star = Some((star_p, star_t + 1));
+                }
+                None => return false,
+            },
+        }
+    }
+    pattern[p..].iter().all(|&c| c == '*')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::glob_match;
+
+    #[test]
+    fn glob() {
+        assert!(glob_match("#chat/*", "#chat/alice"));
+        assert!(glob_match("#chat/*", "#chat/"));
+        assert!(!glob_match("#chat/*", "#team/general"));
+        assert!(glob_match("#*/general", "#team/general"));
+        assert!(glob_match("#chat/?lice", "#chat/alice"));
+        assert!(!glob_match("#chat/?", "#chat/alice"));
+        assert!(glob_match("*", "#anything"));
+        assert!(glob_match("#a*b*c", "#axxbyyc"));
+        assert!(!glob_match("#a*b*c", "#axxbyy"));
+        assert!(glob_match("#chat/alice", "#chat/alice"));
     }
 }
